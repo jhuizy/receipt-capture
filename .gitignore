@@ -29,3 +29,5 @@ cabal.project.local~
 
 # End of https://www.toptal.com/developers/gitignore/api/haskell
 client_session_key.aes
+test.db
+test.db*

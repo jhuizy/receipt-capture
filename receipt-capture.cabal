@@ -33,5 +33,6 @@ executable receipt-capture
                      , persistent-sqlite
                      , monad-logger
                      , resourcet
+                     , base64-bytestring
   -- hs-source-dirs:
   default-language:    Haskell2010

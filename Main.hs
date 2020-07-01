@@ -1,3 +1,4 @@
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE DerivingStrategies #-}
@@ -12,6 +13,7 @@
 module Main where
 
 import           Data.Text                         hiding ( empty )
+import qualified Data.Text.Encoding            as T
 import qualified Data.Text                     as T
 import           Network.Wai.Handler.Warp                 ( run )
 import           Turtle
@@ -20,12 +22,16 @@ import           Prelude                           hiding ( FilePath )
 import           Database.Persist
 import           Database.Persist.Sqlite
 import           Data.ByteString                          ( ByteString )
+
 import           Data.Time.Clock
 import           Control.Monad.Logger                     ( LoggingT
                                                           , runStdoutLoggingT
                                                           , runStderrLoggingT
                                                           )
 import           UnliftIO.Resource                        ( runResourceT )
+import           Control.Monad.Reader                     ( ReaderT(runReaderT)
+                                                          )
+import           Data.ByteString.Base64                   ( encode )
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 Receipt
@@ -38,8 +44,10 @@ Receipt
 newtype App = App ConnectionPool
 
 mkYesod "App" [parseRoutes|
-  /         RootR     GET
-  /receipts ReceiptsR POST
+  /                         RootR         GET
+  /receipts                 ReceiptsR     GET POST
+  !/receipts/new            ReceiptsNewR  GET
+  !/receipts/#ReceiptId     ReceiptsShowR GET
 |]
 
 instance Yesod App where
@@ -71,13 +79,54 @@ getRootR = defaultLayout [whamlet|
     <span>Todo...
 |]
 
+getReceiptsNewR :: Handler Html
+getReceiptsNewR = do
+  (widget, enctype) <- generateFormPost receiptForm
+  defaultLayout [whamlet|
+    <div>
+      <p>Enter a new receipt
+      <form method=post action=@{ReceiptsR} enctype=#{enctype}>
+        ^{widget}
+        <button>Submit
+  |]
+
+
+getReceiptsR :: Handler Html
+getReceiptsR = do
+  receipts <- runDB $ selectList [] [Desc ReceiptDate]
+  defaultLayout [whamlet|
+    <div>
+      $forall Entity id (Receipt name raw date) <- receipts
+        <li><a href=@{ReceiptsShowR id}>#{show name}
+  |]
+
+getReceiptsShowR :: ReceiptId -> Handler Html
+getReceiptsShowR receiptId = do
+  mReceipt <- runDB $ selectFirst [ReceiptId ==. receiptId] [LimitTo 1]
+  case mReceipt of
+    Just (Entity _ receipt) -> renderReceipt receipt
+    Nothing                 -> notFound
+
+ where
+  base64png raw = T.decodeUtf8 . encode $ raw
+
+  renderReceipt (Receipt name raw date) = defaultLayout [whamlet|
+        <div>
+          <h1>#{show name}
+          <span>Uploaded: #{show date}
+          <img src="data:image/png;base64,#{base64png raw}">
+      |]
+
 postReceiptsR :: Handler Html
 postReceiptsR = do
   ((result, widget), enctype) <- runFormPost receiptForm
   case result of
     FormSuccess receiptForm -> do
       receipt <- receiptFormToReceipt receiptForm
-      defaultLayout [whamlet|<p>#{show receipt}|]
+      mId     <- runDB $ insertUnique receipt
+      case mId of
+        Just id -> redirect $ ReceiptsShowR id
+        Nothing -> invalidArgs ["Receipt with ID already exists"]
     FormFailure errors -> do
       defaultLayout [whamlet|<p>errors|]
 
@@ -110,7 +159,9 @@ readPdf file = do
   args      = [format fp file, "stdout", "-l", "eng"]
 
 runApp :: MonadIO m => ConnectionPool -> m ()
-runApp pool = liftIO $ warp 3000 $ App pool
+runApp pool = liftIO $ do
+  flip runSqlPool pool $ runMigration migrateAll
+  warp 3000 $ App pool
 
 main :: IO ()
 main = runResourceT $ runStderrLoggingT $ withSqlitePool dbName
