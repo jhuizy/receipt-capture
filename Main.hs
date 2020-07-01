@@ -17,7 +17,7 @@ import qualified Data.Text.Encoding            as T
 import qualified Data.Text                     as T
 import           Network.Wai.Handler.Warp                 ( run )
 import           Turtle
-import qualified Turtle.Bytes as TB
+import qualified Turtle.Bytes                  as TB
 import           Yesod
 import           Prelude                           hiding ( FilePath )
 import           Database.Persist
@@ -33,7 +33,9 @@ import           UnliftIO.Resource                        ( runResourceT )
 import           Control.Monad.Reader                     ( ReaderT(runReaderT)
                                                           )
 import           Data.ByteString.Base64                   ( encode )
-import GHC.IO.Encoding (setLocaleEncoding, utf8)
+import           GHC.IO.Encoding                          ( setLocaleEncoding
+                                                          , utf8
+                                                          )
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 Receipt
@@ -113,7 +115,7 @@ getReceiptsShowR receiptId = do
     Just (Entity _ receipt) -> do
       info <- liftIO $ extractTextFromImage (receiptRaw receipt)
       renderReceipt receipt info
-    Nothing                 -> notFound
+    Nothing -> notFound
 
  where
   base64png raw = T.decodeUtf8 . encode $ raw
@@ -168,7 +170,7 @@ extractTextFromImage bs = do
   dump <- TB.strict $ TB.inproc tesseract args input
   return . T.lines . T.decodeUtf8 $ dump
  where
-  input = pure bs
+  input     = pure bs
   tesseract = "tesseract"
   args      = ["stdin", "stdout", "-l", "eng"]
 
