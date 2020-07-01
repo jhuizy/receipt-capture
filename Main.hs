@@ -17,6 +17,7 @@ import qualified Data.Text.Encoding            as T
 import qualified Data.Text                     as T
 import           Network.Wai.Handler.Warp                 ( run )
 import           Turtle
+import qualified Turtle.Bytes as TB
 import           Yesod
 import           Prelude                           hiding ( FilePath )
 import           Database.Persist
@@ -32,12 +33,17 @@ import           UnliftIO.Resource                        ( runResourceT )
 import           Control.Monad.Reader                     ( ReaderT(runReaderT)
                                                           )
 import           Data.ByteString.Base64                   ( encode )
+import GHC.IO.Encoding (setLocaleEncoding, utf8)
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 Receipt
   name Text
   raw ByteString
   date UTCTime default=CURRENT_TIME
+  deriving Show Eq
+ReceiptInfo
+  receipt ReceiptId
+  info [Text]
   deriving Show Eq
 |]
 
@@ -76,7 +82,7 @@ instance RenderMessage App FormMessage where
 getRootR :: Handler Html
 getRootR = defaultLayout [whamlet|
   <div>
-    <span>Todo...
+    <span>List of receipts
 |]
 
 getReceiptsNewR :: Handler Html
@@ -104,17 +110,21 @@ getReceiptsShowR :: ReceiptId -> Handler Html
 getReceiptsShowR receiptId = do
   mReceipt <- runDB $ selectFirst [ReceiptId ==. receiptId] [LimitTo 1]
   case mReceipt of
-    Just (Entity _ receipt) -> renderReceipt receipt
+    Just (Entity _ receipt) -> do
+      info <- liftIO $ extractTextFromImage (receiptRaw receipt)
+      renderReceipt receipt info
     Nothing                 -> notFound
 
  where
   base64png raw = T.decodeUtf8 . encode $ raw
 
-  renderReceipt (Receipt name raw date) = defaultLayout [whamlet|
+  renderReceipt (Receipt name raw date) infoList = defaultLayout [whamlet|
         <div>
-          <h1>#{show name}
-          <span>Uploaded: #{show date}
+          <h1>#{name}
+          <span>Uploaded: #{formatRFC822 date}
           <img src="data:image/png;base64,#{base64png raw}">
+          $forall info <- infoList
+            <div>#{info}
       |]
 
 postReceiptsR :: Handler Html
@@ -150,13 +160,17 @@ receiptFormToReceipt (ReceiptForm name info) = do
   time <- liftIO getCurrentTime
   return $ Receipt name bs time
 
-readPdf :: FilePath -> IO [Text]
-readPdf file = do
-  dump <- strict $ inproc tesseract args empty
-  return $ T.lines dump
+rawPng :: IO ByteString
+rawPng = TB.strict $ TB.input "./assets/receipt.png"
+
+extractTextFromImage :: ByteString -> IO [Text]
+extractTextFromImage bs = do
+  dump <- TB.strict $ TB.inproc tesseract args input
+  return . T.lines . T.decodeUtf8 $ dump
  where
+  input = pure bs
   tesseract = "tesseract"
-  args      = [format fp file, "stdout", "-l", "eng"]
+  args      = ["stdin", "stdout", "-l", "eng"]
 
 runApp :: MonadIO m => ConnectionPool -> m ()
 runApp pool = liftIO $ do
@@ -170,3 +184,5 @@ main = runResourceT $ runStderrLoggingT $ withSqlitePool dbName
  where
   dbName          = "test.db"
   connectionCount = 10
+
+
