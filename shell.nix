@@ -1,7 +1,6 @@
 let
   sources = import ./nix/sources.nix;
   pkgs = import sources.nixpkgs { };
-  # inherit pkgs;
   gitignoreSource = (import sources."gitignore.nix" { inherit (pkgs) lib;}).gitignoreSource;
   project = pkgs.haskellPackages.callCabal2nix "receipt-capture" (gitignoreSource ./.) { };
 in
@@ -11,7 +10,7 @@ pkgs.mkShell {
     haskellPackages.ghcide
     haskellPackages.cabal2nix
     haskellPackages.hlint
-    haskellPackages.ormolu
+    haskellPackages.brittany
     haskellPackages.cabal2nix
     haskellPackages.ghcid
     coreutils

@@ -24,5 +24,14 @@ executable receipt-capture
   build-depends:       base >=4.13 && <4.14
                      , turtle
                      , text
+                     , yesod
+                     , persistent
+                     , mtl
+                     , warp
+                     , bytestring
+                     , time
+                     , persistent-sqlite
+                     , monad-logger
+                     , resourcet
   -- hs-source-dirs:
   default-language:    Haskell2010
