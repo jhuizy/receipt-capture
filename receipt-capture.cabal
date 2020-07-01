@@ -26,6 +26,7 @@ executable receipt-capture
                      , text
                      , yesod
                      , persistent
+                     , esqueleto
                      , mtl
                      , warp
                      , bytestring

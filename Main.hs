@@ -16,12 +16,12 @@ import           Data.Text                         hiding ( empty )
 import qualified Data.Text.Encoding            as T
 import qualified Data.Text                     as T
 import           Network.Wai.Handler.Warp                 ( run )
-import           Turtle
+import           Turtle hiding (select, limit)
 import qualified Turtle.Bytes                  as TB
-import           Yesod
+import           Yesod hiding ((==.))
 import           Prelude                           hiding ( FilePath )
-import           Database.Persist
-import           Database.Persist.Sqlite
+import           Database.Persist hiding ((==.))
+import           Database.Persist.Sqlite hiding ((==.))
 import           Data.ByteString                          ( ByteString )
 
 import           Data.Time.Clock
@@ -36,6 +36,7 @@ import           Data.ByteString.Base64                   ( encode )
 import           GHC.IO.Encoding                          ( setLocaleEncoding
                                                           , utf8
                                                           )
+import Database.Esqueleto
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 Receipt
@@ -110,12 +111,14 @@ getReceiptsR = do
 
 getReceiptsShowR :: ReceiptId -> Handler Html
 getReceiptsShowR receiptId = do
-  mReceipt <- runDB $ selectFirst [ReceiptId ==. receiptId] [LimitTo 1]
-  case mReceipt of
-    Just (Entity _ receipt) -> do
-      info <- liftIO $ extractTextFromImage (receiptRaw receipt)
+  results <- runDB $ select $ from $ \(r, ri) -> do
+    where_ ((r ^. ReceiptId ==. ri ^. ReceiptInfoReceipt) &&. (r ^. ReceiptId ==. val receiptId))
+    limit 1
+    return (r, ri)
+  case results of
+    [((Entity _ receipt), (Entity _ (ReceiptInfo _ info)))] -> do
       renderReceipt receipt info
-    Nothing -> notFound
+    _ -> notFound
 
  where
   base64png raw = T.decodeUtf8 . encode $ raw
@@ -134,11 +137,11 @@ postReceiptsR = do
   ((result, widget), enctype) <- runFormPost receiptForm
   case result of
     FormSuccess receiptForm -> do
-      receipt <- receiptFormToReceipt receiptForm
-      mId     <- runDB $ insertUnique receipt
-      case mId of
-        Just id -> redirect $ ReceiptsShowR id
-        Nothing -> invalidArgs ["Receipt with ID already exists"]
+      receipt   <- receiptFormToReceipt receiptForm
+      info      <- liftIO $ extractTextFromImage (receiptRaw receipt)
+      receiptId <- runDB $ insert receipt
+      infoId    <- runDB $ insert $ ReceiptInfo receiptId info
+      redirect $ ReceiptsShowR receiptId
     FormFailure errors -> do
       defaultLayout [whamlet|<p>errors|]
 
