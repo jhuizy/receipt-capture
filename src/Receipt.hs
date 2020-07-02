@@ -6,7 +6,6 @@ import           Database.Persist                         ( selectList )
 import           Data.Text                                ( Text )
 import           Database.Esqueleto
 import           Model
-import           Control.Monad.IO.Class                   ( MonadIO )
 import           Control.Monad.Reader                     ( ReaderT )
 import           Control.Monad.IO.Class                   ( MonadIO(liftIO) )
 

@@ -52,11 +52,11 @@ import           Receipt                                  ( insertReceipt
 newtype App = App ConnectionPool
 
 mkYesod "App" [parseRoutes|
-  /                              RootR         GET
-  /receipts                      ReceiptsR     GET POST
-  !/receipts/new                 ReceiptsNewR  GET
-  !/receipts/#ReceiptId/edit     ReceiptsEditR  GET
-  !/receipts/#ReceiptId          ReceiptsShowR GET DELETE PUT
+  /                              RootR             GET
+  /receipts                      ListReceiptsR     GET POST
+  !/receipts/new                 NewReceiptR       GET
+  !/receipts/#ReceiptId/edit     EditReceiptR      GET
+  !/receipts/#ReceiptId          ReceiptR          GET DELETE PUT
 |]
 
 instance Yesod App where
@@ -65,7 +65,8 @@ instance Yesod App where
     withUrlRenderer [hamlet|
     <html lang="en">
       <head>
-        <title>Receipt Manager
+        <title>#{pageTitle pc}
+        ^{pageHead pc}
       <body>
         ^{pageBody pc}
   |]
@@ -88,22 +89,21 @@ getRootR = defaultLayout [whamlet|
     <span>List of receipts
 |]
 
-getReceiptsNewR :: Handler Html
-getReceiptsNewR = do
+getNewReceiptR :: Handler Html
+getNewReceiptR = do
   (widget, enctype) <- generateFormPost receiptForm
   defaultLayout [whamlet|
     <div>
       <p>Enter a new receipt
-      <form method=post action=@{ReceiptsR} enctype=#{enctype}>
+      <form method=post action=@{ListReceiptsR} enctype=#{enctype}>
         ^{widget}
         <button>Submit
   |]
 
 
-getReceiptsR :: Handler Html
-getReceiptsR = do
+getListReceiptsR :: Handler Html
+getListReceiptsR = do
   receipts <- runDB fetchReceipts
-  let mkDeleteWidget = \id -> methodLink "delete" "DELETE" (ReceiptsShowR id)
   defaultLayout [whamlet|
     <div>
         <table>
@@ -114,9 +114,9 @@ getReceiptsR = do
           <tbody>
             $forall (id, Receipt name raw date) <- receipts
               <tr>
-                <td><a href=@{ReceiptsShowR id}>#{name}
+                <td><a href=@{ReceiptR id}>#{name}
                 <td>#{formatRFC1123 date}      
-                <td>^{mkDeleteWidget id} | <a href=@{ReceiptsEditR id}>edit
+                <td>delete | <a href=@{EditReceiptR id}>edit
   |]
 
 methodLink :: Text -> Text -> Route site -> WidgetFor site ()
@@ -126,19 +126,19 @@ methodLink name method link = [whamlet|
     <button>#{name}
 |]
 
-putReceiptsShowR :: ReceiptId -> Handler Html
-putReceiptsShowR = undefined
+putReceiptR :: ReceiptId -> Handler Html
+putReceiptR = undefined
 
-getReceiptsEditR  :: ReceiptId -> Handler Html
-getReceiptsEditR = undefined
+getEditReceiptR  :: ReceiptId -> Handler Html
+getEditReceiptR = undefined
 
-deleteReceiptsShowR :: ReceiptId -> Handler Html
-deleteReceiptsShowR id = do
+deleteReceiptR :: ReceiptId -> Handler Html
+deleteReceiptR id = do
   runDB $ deleteReceipt id
-  redirect ReceiptsR
+  redirect ListReceiptsR
 
-getReceiptsShowR :: ReceiptId -> Handler Html
-getReceiptsShowR receiptId = do
+getReceiptR :: ReceiptId -> Handler Html
+getReceiptR receiptId = do
   mReceiptAndInfo <- runDB $ fetchReceipt receiptId
   case mReceiptAndInfo of
     Just (receipt, info) -> do
@@ -157,15 +157,15 @@ getReceiptsShowR receiptId = do
             <div>#{info}
       |]
 
-postReceiptsR :: Handler Html
-postReceiptsR = do
+postListReceiptsR :: Handler Html
+postListReceiptsR = do
   ((result, widget), enctype) <- runFormPost receiptForm
   case result of
     FormSuccess receiptForm -> do
       receipt   <- receiptFormToReceipt receiptForm
       info      <- liftIO $ extractTextFromImage (receiptRaw receipt)
       receiptId <- runDB $ insertReceipt receipt info
-      redirect $ ReceiptsShowR receiptId
+      redirect $ ReceiptR receiptId
     FormFailure errors -> do
       defaultLayout [whamlet|<p>errors|]
 
