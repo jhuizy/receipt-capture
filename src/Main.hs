@@ -16,12 +16,14 @@ import           Data.Text                         hiding ( empty )
 import qualified Data.Text.Encoding            as T
 import qualified Data.Text                     as T
 import           Network.Wai.Handler.Warp                 ( run )
-import           Turtle hiding (select, limit)
+import           Turtle                            hiding ( select
+                                                          , limit
+                                                          )
 import qualified Turtle.Bytes                  as TB
-import           Yesod hiding ((==.))
+import           Yesod                             hiding ( (==.) )
 import           Prelude                           hiding ( FilePath )
-import           Database.Persist hiding ((==.))
-import           Database.Persist.Sqlite hiding ((==.))
+import           Database.Persist                  hiding ( (==.) )
+import           Database.Persist.Sqlite           hiding ( (==.) )
 import           Data.ByteString                          ( ByteString )
 
 import           Data.Time.Clock
@@ -36,27 +38,25 @@ import           Data.ByteString.Base64                   ( encode )
 import           GHC.IO.Encoding                          ( setLocaleEncoding
                                                           , utf8
                                                           )
-import Database.Esqueleto
+import           Database.Esqueleto
+import           Model
+import           OCR                                      ( extractTextFromImage
+                                                          )
+import           Receipt                                  ( insertReceipt
+                                                          , fetchReceipt
+                                                          , fetchReceipts
+                                                          , deleteReceipt
+                                                          )
 
-share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
-Receipt
-  name Text
-  raw ByteString
-  date UTCTime default=CURRENT_TIME
-  deriving Show Eq
-ReceiptInfo
-  receipt ReceiptId
-  info [Text]
-  deriving Show Eq
-|]
 
 newtype App = App ConnectionPool
 
 mkYesod "App" [parseRoutes|
-  /                         RootR         GET
-  /receipts                 ReceiptsR     GET POST
-  !/receipts/new            ReceiptsNewR  GET
-  !/receipts/#ReceiptId     ReceiptsShowR GET
+  /                              RootR         GET
+  /receipts                      ReceiptsR     GET POST
+  !/receipts/new                 ReceiptsNewR  GET
+  !/receipts/#ReceiptId/edit     ReceiptsEditR  GET
+  !/receipts/#ReceiptId          ReceiptsShowR GET DELETE PUT
 |]
 
 instance Yesod App where
@@ -102,21 +102,46 @@ getReceiptsNewR = do
 
 getReceiptsR :: Handler Html
 getReceiptsR = do
-  receipts <- runDB $ selectList [] [Desc ReceiptDate]
+  receipts <- runDB fetchReceipts
+  let mkDeleteWidget = \id -> methodLink "delete" "DELETE" (ReceiptsShowR id)
   defaultLayout [whamlet|
     <div>
-      $forall Entity id (Receipt name raw date) <- receipts
-        <li><a href=@{ReceiptsShowR id}>#{show name}
+        <table>
+          <thead>
+            <th>Name
+            <th>Date Created
+            <th>Actions
+          <tbody>
+            $forall (id, Receipt name raw date) <- receipts
+              <tr>
+                <td><a href=@{ReceiptsShowR id}>#{name}
+                <td>#{formatRFC1123 date}      
+                <td>^{mkDeleteWidget id} | <a href=@{ReceiptsEditR id}>edit
   |]
+
+methodLink :: Text -> Text -> Route site -> WidgetFor site ()
+methodLink name method link = [whamlet|
+  $newline never
+  <form method=#{method} action="@{link}">
+    <button>#{name}
+|]
+
+putReceiptsShowR :: ReceiptId -> Handler Html
+putReceiptsShowR = undefined
+
+getReceiptsEditR  :: ReceiptId -> Handler Html
+getReceiptsEditR = undefined
+
+deleteReceiptsShowR :: ReceiptId -> Handler Html
+deleteReceiptsShowR id = do
+  runDB $ deleteReceipt id
+  redirect ReceiptsR
 
 getReceiptsShowR :: ReceiptId -> Handler Html
 getReceiptsShowR receiptId = do
-  results <- runDB $ select $ from $ \(r, ri) -> do
-    where_ ((r ^. ReceiptId ==. ri ^. ReceiptInfoReceipt) &&. (r ^. ReceiptId ==. val receiptId))
-    limit 1
-    return (r, ri)
-  case results of
-    [((Entity _ receipt), (Entity _ (ReceiptInfo _ info)))] -> do
+  mReceiptAndInfo <- runDB $ fetchReceipt receiptId
+  case mReceiptAndInfo of
+    Just (receipt, info) -> do
       renderReceipt receipt info
     _ -> notFound
 
@@ -139,8 +164,7 @@ postReceiptsR = do
     FormSuccess receiptForm -> do
       receipt   <- receiptFormToReceipt receiptForm
       info      <- liftIO $ extractTextFromImage (receiptRaw receipt)
-      receiptId <- runDB $ insert receipt
-      infoId    <- runDB $ insert $ ReceiptInfo receiptId info
+      receiptId <- runDB $ insertReceipt receipt info
       redirect $ ReceiptsShowR receiptId
     FormFailure errors -> do
       defaultLayout [whamlet|<p>errors|]
@@ -165,17 +189,6 @@ receiptFormToReceipt (ReceiptForm name info) = do
   time <- liftIO getCurrentTime
   return $ Receipt name bs time
 
-rawPng :: IO ByteString
-rawPng = TB.strict $ TB.input "./assets/receipt.png"
-
-extractTextFromImage :: ByteString -> IO [Text]
-extractTextFromImage bs = do
-  dump <- TB.strict $ TB.inproc tesseract args input
-  return . T.lines . T.decodeUtf8 $ dump
- where
-  input     = pure bs
-  tesseract = "tesseract"
-  args      = ["stdin", "stdout", "-l", "eng"]
 
 runApp :: MonadIO m => ConnectionPool -> m ()
 runApp pool = liftIO $ do
