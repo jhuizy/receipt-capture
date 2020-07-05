@@ -17,8 +17,8 @@ maintainer:          jhuizenga99@gmail.com
 build-type:          Simple
 extra-source-files:  CHANGELOG.md
 
-executable receipt-capture
-  main-is:             Main.hs
+library
+  exposed-modules:     App Model OCR Receipt
   hs-source-dirs:      src
   -- other-modules:
   -- other-extensions:
@@ -37,5 +37,22 @@ executable receipt-capture
                      , monad-logger
                      , resourcet
                      , base64-bytestring
-  -- hs-source-dirs:
+  default-language:    Haskell2010
+
+executable receipt-capture-exe
+  main-is:             Main.hs
+  hs-source-dirs:      app
+  build-depends:       base >=4.13 && <4.14
+                     , receipt-capture
+  default-language:    Haskell2010
+
+test-suite test-receipt-capture
+  type:             exitcode-stdio-1.0
+  main-is:             Main.hs
+  hs-source-dirs:      test
+  build-depends:       base >=4.13 && <4.14
+                     , receipt-capture
+                     , hspec
+                     , hspec-hedgehog
+                     , hedgehog
   default-language:    Haskell2010

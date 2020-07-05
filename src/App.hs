@@ -10,7 +10,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Main where
+module App where
 
 import           Data.Text                         hiding ( empty )
 import qualified Data.Text.Encoding            as T
@@ -61,14 +61,17 @@ mkYesod "App" [parseRoutes|
 
 instance Yesod App where
   defaultLayout widget = do
-    pc <- widgetToPageContent widget
+    pc <- widgetToPageContent $ do 
+      addStylesheetRemote "https://cdn.jsdelivr.net/npm/bulma@0.9.0/css/bulma.min.css"
+      widget
     withUrlRenderer [hamlet|
     <html lang="en">
       <head>
         <title>#{pageTitle pc}
         ^{pageHead pc}
       <body>
-        ^{pageBody pc}
+        <div class="container">
+          ^{pageBody pc}
   |]
 
 instance YesodPersist App where
@@ -106,7 +109,7 @@ getListReceiptsR = do
   receipts <- runDB fetchReceipts
   defaultLayout [whamlet|
     <div>
-        <table>
+        <table class="table">
           <thead>
             <th>Name
             <th>Date Created
@@ -190,17 +193,19 @@ receiptFormToReceipt (ReceiptForm name info) = do
   return $ Receipt name bs time
 
 
-runApp :: MonadIO m => ConnectionPool -> m ()
-runApp pool = liftIO $ do
+runAppWithPool :: MonadIO m => ConnectionPool -> m ()
+runAppWithPool pool = liftIO $ do
   flip runSqlPool pool $ runMigration migrateAll
   warp 3000 $ App pool
 
-main :: IO ()
-main = runResourceT $ runStderrLoggingT $ withSqlitePool dbName
+runApp :: IO ()
+runApp = runResourceT $ runStderrLoggingT $ withSqlitePool dbName
                                                          connectionCount
-                                                         runApp
+                                                         runAppWithPool
  where
   dbName          = "test.db"
   connectionCount = 10
 
 
+main :: IO ()
+main = runApp

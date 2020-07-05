@@ -1,0 +1,14 @@
+
+cradle: 
+  cabal:
+    - component: "exe:receipt-capture-exe" 
+      path: "./app/"
+    - component: "lib:receipt-capture"
+      path: "./src/"
+    - component: "test:test-receipt-capture"
+      path: "./test"
+  direct:
+    arguments:
+      - -no-user-package-db
+      - -Wall
+      - -fdefer-typed-holes
