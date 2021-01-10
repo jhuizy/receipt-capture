@@ -11,7 +11,7 @@
     flake = false;
   };
 
-  outputs = { self, nixpkgs, nur, flake-utils, gitignoreSrc }: 
+  outputs = { self, nixpkgs, nur, flake-utils, gitignoreSrc, flake-compat }: 
     flake-utils.lib.eachDefaultSystem (
       system:
         let
