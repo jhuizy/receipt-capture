@@ -6,6 +6,10 @@
     url = "github:hercules-ci/gitignore.nix";
     flake = false;
   };
+  inputs.flake-compat = {
+    url = "github:edolstra/flake-compat";
+    flake = false;
+  };
 
   outputs = { self, nixpkgs, nur, flake-utils, gitignoreSrc }: 
     flake-utils.lib.eachDefaultSystem (
