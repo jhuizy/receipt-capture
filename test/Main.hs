@@ -6,7 +6,9 @@ import App hiding (main)
 import Model
 
 main :: IO ()
-main = check prop_ListReverses
+main = do
+  check prop_ListReverses
+  return ()
 
 prop_ListReverses :: Property
 prop_ListReverses = property $ do

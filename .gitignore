@@ -31,3 +31,6 @@ cabal.project.local~
 client_session_key.aes
 test.db
 test.db*
+
+# nix
+result
